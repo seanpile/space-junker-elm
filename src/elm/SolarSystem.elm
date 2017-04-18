@@ -1,7 +1,7 @@
-module SolarSystem exposing (au, SolarSystem, seed, advance)
+module SolarSystem exposing (au, SolarSystem, find, seed, advance)
 
 import Time exposing (Time)
-import Orbits exposing (Orbit)
+import Orbits exposing (Orbit, fromKeplerElements)
 import KeplerElements exposing (KeplerElements)
 
 
@@ -16,9 +16,14 @@ type alias SolarSystem =
     }
 
 
+type alias BodyId =
+    String
+
+
 type Body
     = Body
-        { constants : BodyConstants
+        { name : BodyId
+        , constants : BodyConstants
         , secondaries : List Body
         , orbit : Maybe Orbit
         }
@@ -29,8 +34,7 @@ type BodyConstants
 
 
 type alias PlanetConstants =
-    { name : String
-    , elements : Maybe KeplerElements
+    { elements : Maybe KeplerElements
     , radius : Float
     , mass : Float
     , u : Float
@@ -58,8 +62,7 @@ scale3 x =
 sun : BodyConstants
 sun =
     Planet
-        { name = "sun"
-        , radius = scale 6.96e8
+        { radius = scale 6.96e8
         , u = scale3 1.3271243800000001e20
         , mass = 1.9891e30
         , elements = Nothing
@@ -69,8 +72,7 @@ sun =
 earth : BodyConstants
 earth =
     Planet
-        { name = "earth"
-        , radius = scale 6.3781e6
+        { radius = scale 6.3781e6
         , mass = 5.9737e24
         , u = scale3 3.986e14
         , elements =
@@ -85,6 +87,37 @@ earth =
         }
 
 
+find : BodyId -> SolarSystem -> Maybe Body
+find bodyId system =
+    let
+        locate : BodyId -> Body -> Maybe Body
+        locate bodyId body =
+            case body of
+                Body { name, secondaries } ->
+                    if name == bodyId then
+                        Just body
+                    else
+                        List.filterMap (locate bodyId) secondaries
+                            |> List.head
+    in
+        locate bodyId system.sun
+
+
+
+{-
+   Return the kepler elements associated with this body
+-}
+
+
+keplerElements : Body -> Maybe KeplerElements
+keplerElements body =
+    case body of
+        Body params ->
+            case params.constants of
+                Planet constants ->
+                    constants.elements
+
+
 seed : Time -> SolarSystem
 seed time =
     let
@@ -92,11 +125,13 @@ seed time =
             { time = time
             , sun =
                 Body
-                    { constants = sun
+                    { name = "sun"
+                    , constants = sun
                     , orbit = Nothing
                     , secondaries =
                         [ Body
-                            { constants = earth
+                            { name = "earth"
+                            , constants = earth
                             , secondaries = []
                             , orbit = Nothing
                             }
@@ -115,7 +150,25 @@ seed time =
 
 initialize : Time -> Maybe Body -> Body -> Body
 initialize t primary body =
-    body
+    let
+        orbit =
+            fromKeplerElements t (keplerElements body)
+    in
+        case body of
+            Body def ->
+                let
+                    -- First initialize ourselves
+                    updatedRef =
+                        { def | orbit = fromKeplerElements t (keplerElements body) }
+
+                    updated =
+                        Body updatedRef
+                in
+                    -- Now initialize all of our secondary bodies
+                    Body
+                        { updatedRef
+                            | secondaries = List.map (initialize t (Just updated)) def.secondaries
+                        }
 
 
 advance : Float -> SolarSystem -> SolarSystem

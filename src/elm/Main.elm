@@ -50,8 +50,12 @@ view : Model -> Html Msg
 view model =
     case model.solarSystem of
         Just system ->
-            div []
-                [ text (toString system.time) ]
+            let
+                earth =
+                    SolarSystem.find "earth" system
+            in
+                div []
+                    [ text (toString earth) ]
 
         Nothing ->
             div []
@@ -66,7 +70,11 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Initialize t ->
-            ( { solarSystem = Just (seed t) }, Cmd.none )
+            let
+                system =
+                    seed t
+            in
+                ( { solarSystem = Just system }, Cmd.none )
 
         Frame dx ->
             case model.solarSystem of
