@@ -19,36 +19,66 @@ type alias SolarSystem =
 
 sun : BodyConstants
 sun =
-    Planet
-        { radius = scale 6.96e8
-        , gm = scale3 1.3271243800000001e20
-        , mass = 1.9891e30
-        , elements =
-            { a = { epoch = 0, delta = 0 }
-            , e = { epoch = 0, delta = 0 }
-            , i = { epoch = 0, delta = 0 }
-            , l = { epoch = 0, delta = 0 }
-            , w = { epoch = 0, delta = 0 }
-            , omega = { epoch = 0, delta = 0 }
-            }
+    { radius = scale 6.96e6
+    , gm = scale3 1.3271243800000001e20
+    , mass = 1.9891e30
+    , elements =
+        { a = { epoch = 0, delta = 0 }
+        , e = { epoch = 0, delta = 0 }
+        , i = { epoch = 0, delta = 0 }
+        , l = { epoch = 0, delta = 0 }
+        , w = { epoch = 0, delta = 0 }
+        , omega = { epoch = 0, delta = 0 }
         }
+    }
+
+
+mercury : BodyConstants
+mercury =
+    { radius = scale 2.4397e6
+    , gm = scale3 2.203e13
+    , mass = 3.302e22
+    , elements =
+        { a = { epoch = 0.38709843, delta = 0 }
+        , e = { epoch = 0.20563661, delta = 0.00002123 }
+        , i = { epoch = 7.00559432, delta = -0.00590158 }
+        , l = { epoch = 252.25166724, delta = 149472.67486623 }
+        , w = { epoch = 77.45771895, delta = 0.15940013 }
+        , omega = { epoch = 48.33961819, delta = -0.12214182 }
+        }
+    }
+
+
+venus : BodyConstants
+venus =
+    { radius = scale 6.0518e6
+    , gm = scale3 3.249e14
+    , mass = 4.8685e24
+    , elements =
+        { a = { epoch = 0.72332102, delta = -0.00000026 }
+        , e = { epoch = 0.00676399, delta = -0.00005107 }
+        , i = { epoch = 3.39777545, delta = 0.00043494 }
+        , l = { epoch = 181.9797085, delta = 58517.8156026 }
+        , w = { epoch = 131.76755713, delta = 0.05679648 }
+        , omega = { epoch = 76.67261496, delta = -0.27274174 }
+        }
+    }
 
 
 earth : BodyConstants
 earth =
-    Planet
-        { radius = scale 6.3781e6
-        , mass = 5.9737e24
-        , gm = scale3 3.986e14
-        , elements =
-            { a = { epoch = 1.00000018, delta = -0.00000003 }
-            , e = { epoch = 0.01673163, delta = -0.00003661 }
-            , i = { epoch = -0.00054346, delta = -0.01337178 }
-            , l = { epoch = 100.46691572, delta = 35999.37306329 }
-            , w = { epoch = 102.93005885, delta = 0.3179526 }
-            , omega = { epoch = -5.11260389, delta = -0.24123856 }
-            }
+    { radius = scale 6.3781e6
+    , mass = 5.9737e24
+    , gm = scale3 3.986e14
+    , elements =
+        { a = { epoch = 1.00000018, delta = -0.00000003 }
+        , e = { epoch = 0.01673163, delta = -0.00003661 }
+        , i = { epoch = -0.00054346, delta = -0.01337178 }
+        , l = { epoch = 100.46691572, delta = 35999.37306329 }
+        , w = { epoch = 102.93005885, delta = 0.3179526 }
+        , omega = { epoch = -5.11260389, delta = -0.24123856 }
         }
+    }
 
 
 
@@ -57,19 +87,17 @@ earth =
 -}
 
 
-keplerElements : Body -> KeplerElements
-keplerElements body =
-    case body.constants of
-        Planet constants ->
-            constants.elements
-
-
 stationaryOrbit : Orbit
 stationaryOrbit =
     { parameters = Stationary
     , derived =
         { position = vec3 0 0 0
         , velocity = vec3 0 0 0
+        , semiMajorAxis = 0
+        , semiMinorAxis = 0
+        , center = vec3 0 0 0
+        , apoapsis = vec3 0 0 0
+        , periapsis = vec3 0 0 0
         }
     }
 
@@ -85,7 +113,17 @@ seed time =
                 , orbit = stationaryOrbit
                 , secondaries =
                     Secondaries
-                        [ { name = "earth"
+                        [ { name = "mercury"
+                          , constants = mercury
+                          , secondaries = Secondaries ([])
+                          , orbit = stationaryOrbit
+                          }
+                        , { name = "venus"
+                          , constants = venus
+                          , secondaries = Secondaries ([])
+                          , orbit = stationaryOrbit
+                          }
+                        , { name = "earth"
                           , constants = earth
                           , secondaries = Secondaries ([])
                           , orbit = stationaryOrbit
@@ -102,7 +140,7 @@ seed time =
                     body
 
                 Just p ->
-                    { body | orbit = (fromKeplerElements time p (keplerElements body)) }
+                    { body | orbit = (fromKeplerElements time p body.constants.elements) }
     in
         map initializeFn system
 

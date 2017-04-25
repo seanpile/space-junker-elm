@@ -1,6 +1,6 @@
 module Orbits exposing (..)
 
-import Math.Vector3 exposing (Vec3, vec3)
+import Math.Vector3 as Vec3 exposing (Vec3, vec3)
 import Time exposing (Time)
 import Date exposing (Date, fromString, fromTime)
 import Date.Extra.Duration exposing (diffDays)
@@ -57,14 +57,9 @@ fromKeplerElements t primary elements =
         meanAnomaly =
             calculateMeanAnomaly l w julianDate
 
-        gm =
-            case primary.constants of
-                Planet constants ->
-                    constants.gm
-
         parameters =
             Elliptic
-                { gm = gm
+                { gm = primary.constants.gm
                 , semiMajorAxis = a
                 , eccentricity = e
                 , inclination = degrees i
@@ -128,6 +123,11 @@ statistics parameters =
         Stationary ->
             { position = vec3 0 0 0
             , velocity = vec3 0 0 0
+            , semiMajorAxis = 0
+            , semiMinorAxis = 0
+            , center = vec3 0 0 0
+            , periapsis = vec3 0 0 0
+            , apoapsis = vec3 0 0 0
             }
 
         ------------------------------------
@@ -138,6 +138,9 @@ statistics parameters =
 
                 e =
                     params.eccentricity
+
+                b =
+                    a * sqrt (1 - e ^ 2)
 
                 m0 =
                     params.meanAnomaly
@@ -156,12 +159,27 @@ statistics parameters =
                         (a * ((cos eccentricAnomaly) - e))
                         (a * sqrt (1 - e ^ 2) * sin (eccentricAnomaly))
                         0
-            in
-                { position =
+
+                periapsis =
+                    vec3 (a * (1 - e)) 0 0
+
+                apoapsis =
+                    vec3 (-a * (1 + e)) 0 0
+
+                center =
+                    vec3 ((Vec3.getX periapsis) - a) 0 0
+
+                transformFn =
                     transformToEcliptic
                         params.argumentPerihelion
                         params.inclination
                         params.longitudeAscendingNode
-                        perifocalPosition
+            in
+                { position = transformFn perifocalPosition
                 , velocity = vec3 0 0 0
+                , semiMajorAxis = a
+                , semiMinorAxis = b
+                , periapsis = transformFn periapsis
+                , apoapsis = transformFn apoapsis
+                , center = transformFn center
                 }

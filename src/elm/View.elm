@@ -1,6 +1,7 @@
 module View exposing (..)
 
 import Html exposing (Html)
+import Color exposing (Color)
 import Html.Attributes exposing (width, height, style)
 import Window
 import Math.Matrix4 as Mat4 exposing (Mat4)
@@ -22,36 +23,126 @@ render window solarSystem =
             perspective =
                 Mat4.makePerspective 45 (toFloat window.width / toFloat window.height) 0.01 100
 
+            cameraPosition =
+                vec3 0 0 5
+
             camera =
-                Mat4.makeLookAt (vec3 0 0 10) (vec3 0 0 0) (vec3 0 1 0)
+                Mat4.makeLookAt cameraPosition (vec3 0 0 0) (vec3 0 1 0)
 
-            uniforms =
-                { matrix = Mat4.identity
-                }
+            cameraMatrix =
+                Mat4.mul perspective camera
 
-            toEntity : Body -> WebGL.Entity
+            toEntity : Body -> List WebGL.Entity
             toEntity body =
                 let
-                    matrix =
-                        List.foldl Mat4.mul
-                            uniforms.matrix
-                            [ Mat4.makeTranslate body.orbit.derived.position
-                            , camera
-                            , perspective
-                            ]
+                    ( bodyMesh, bodyMatrix ) =
+                        bodyToEntity body cameraPosition
+
+                    trajectoryEntity =
+                        trajectoryToEntity body
                 in
-                    WebGL.entity
-                        vertexShader
-                        fragmentShader
-                        (discMesh 50 0.5)
-                        { uniforms | matrix = matrix }
+                    case trajectoryEntity of
+                        Nothing ->
+                            [ WebGL.entity
+                                vertexShader
+                                fragmentShader
+                                bodyMesh
+                                { matrix = Mat4.mul cameraMatrix bodyMatrix }
+                            ]
+
+                        Just ( trajectoryMesh, trajectoryMatrix ) ->
+                            [ WebGL.entity
+                                vertexShader
+                                fragmentShader
+                                bodyMesh
+                                { matrix = Mat4.mul cameraMatrix bodyMatrix }
+                            , WebGL.entity
+                                vertexShader
+                                fragmentShader
+                                trajectoryMesh
+                                { matrix = Mat4.mul cameraMatrix trajectoryMatrix }
+                            ]
          in
-            SolarSystem.visit toEntity solarSystem
+            List.concat (SolarSystem.visit toEntity solarSystem)
         )
 
 
 type alias Uniforms =
     { matrix : Mat4 }
+
+
+color : Body -> Vec3
+color body =
+    let
+        c =
+            Color.toRgb
+                (case body.name of
+                    "sun" ->
+                        Color.yellow
+
+                    "mercury" ->
+                        Color.gray
+
+                    "venus" ->
+                        Color.orange
+
+                    "earth" ->
+                        Color.blue
+
+                    _ ->
+                        Color.gray
+                )
+    in
+        vec3
+            (toFloat c.red / 255)
+            (toFloat c.green / 255)
+            (toFloat c.blue / 255)
+
+
+bodyToEntity : Body -> Vec3 -> ( Mesh Vertex, Mat4 )
+bodyToEntity body cameraPosition =
+    let
+        position =
+            body.orbit.derived.position
+
+        scale =
+            (max (0.005 * (Vec3.distance cameraPosition position)) body.constants.radius) / body.constants.radius
+
+        matrix =
+            List.foldl Mat4.mul
+                Mat4.identity
+                [ Mat4.makeScale3 scale scale scale
+                , Mat4.makeTranslate
+                    position
+                ]
+    in
+        ( discMesh 50 body.constants.radius (color body), matrix )
+
+
+trajectoryToEntity : Body -> Maybe ( Mesh Vertex, Mat4 )
+trajectoryToEntity body =
+    case body.orbit.parameters of
+        ------------------------
+        Stationary ->
+            Nothing
+
+        ------------------------
+        Elliptic elements ->
+            let
+                matrix =
+                    List.foldl Mat4.mul
+                        Mat4.identity
+                        [ Mat4.makeScale3
+                            body.orbit.derived.semiMajorAxis
+                            body.orbit.derived.semiMinorAxis
+                            1
+                        , Mat4.makeRotate elements.argumentPerihelion Vec3.k
+                        , Mat4.makeRotate elements.inclination Vec3.i
+                        , Mat4.makeRotate elements.longitudeAscendingNode Vec3.k
+                        , Mat4.makeTranslate body.orbit.derived.center
+                        ]
+            in
+                Just ( circleMesh 50 1 (color body), matrix )
 
 
 

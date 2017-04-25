@@ -10,17 +10,17 @@ type alias Vertex =
     }
 
 
-discMesh : Int -> Float -> Mesh Vertex
-discMesh segments radius =
+discMesh : Int -> Float -> Vec3 -> Mesh Vertex
+discMesh segments radius color =
     (List.range 0 (segments - 1))
         |> List.map (\idx -> (toFloat idx) * ((pi * 2) / (toFloat segments)))
         |> List.map
             (\angle ->
-                { color = vec3 0 0 0
+                { color = color
                 , position = Vector3.fromTuple ( radius * cos angle, radius * sin angle, 0 )
                 }
             )
-        |> (::) { color = vec3 0 0 0, position = vec3 0 0 0 }
+        |> (::) { color = color, position = vec3 0 0 0 }
         |> flip WebGL.indexedTriangles
             ((List.range 0 (segments - 1))
                 |> List.map
@@ -36,13 +36,13 @@ discMesh segments radius =
             )
 
 
-circleMesh : Int -> Float -> Mesh Vertex
-circleMesh segments radius =
+circleMesh : Int -> Float -> Vec3 -> Mesh Vertex
+circleMesh segments radius color =
     (List.range 0 (segments - 1))
         |> List.map (\idx -> (toFloat idx) * ((pi * 2) / (toFloat segments)))
         |> List.map
             (\angle ->
-                { color = vec3 0 0 0
+                { color = color
                 , position = Vector3.fromTuple ( radius * cos angle, radius * sin angle, 0 )
                 }
             )

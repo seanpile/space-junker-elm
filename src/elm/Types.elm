@@ -31,11 +31,7 @@ type Secondaries
     = Secondaries (List Body)
 
 
-type BodyConstants
-    = Planet PlanetConstants
-
-
-type alias PlanetConstants =
+type alias BodyConstants =
     { elements : KeplerElements
     , radius : Float
     , mass : Float
@@ -96,4 +92,11 @@ type alias OrbitalElements =
 
 
 type alias OrbitalStatistics =
-    { position : Vec3, velocity : Vec3 }
+    { position : Vec3
+    , velocity : Vec3
+    , semiMajorAxis : Float
+    , semiMinorAxis : Float
+    , center : Vec3
+    , periapsis : Vec3
+    , apoapsis : Vec3
+    }
