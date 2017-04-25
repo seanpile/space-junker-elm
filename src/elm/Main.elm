@@ -1,10 +1,12 @@
 module Main exposing (..)
 
 import Html exposing (Html, div, text, program)
+import Window
 import Task
 import Time exposing (Time)
-import AnimationFrame exposing (diffs)
+import AnimationFrame
 import SolarSystem exposing (SolarSystem, seed, advance)
+import View
 
 
 -- MAIN
@@ -20,17 +22,42 @@ main =
         }
 
 
+maxIterations : Int
+maxIterations =
+    1000
+
+
 
 -- MODEL
 
 
 type alias Model =
-    { solarSystem : Maybe SolarSystem }
+    { initialized : Bool
+    , numTimes : Int
+    , timeStep : Float
+    , window : Window.Size
+    , solarSystem : SolarSystem
+    }
+
+
+initialModel : Model
+initialModel =
+    { initialized = False
+    , numTimes = 0
+    , timeStep = 1.0e6
+    , window = { width = 0, height = 0 }
+    , solarSystem = SolarSystem.seed 0
+    }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { solarSystem = Nothing }, Task.perform Initialize Time.now )
+    ( initialModel
+    , Cmd.batch
+        [ Task.perform Initialize Time.now
+        , Task.perform OnWindowResize Window.size
+        ]
+    )
 
 
 
@@ -39,7 +66,8 @@ init =
 
 type Msg
     = Initialize Time
-    | Frame Time
+    | OnWindowResize Window.Size
+    | Advance Time
 
 
 
@@ -47,19 +75,8 @@ type Msg
 
 
 view : Model -> Html Msg
-view model =
-    case model.solarSystem of
-        Just system ->
-            let
-                earth =
-                    SolarSystem.find "earth" system
-            in
-                div []
-                    [ text (toString earth) ]
-
-        Nothing ->
-            div []
-                [ text "Not finished loading yet!" ]
+view { window, solarSystem } =
+    View.render window solarSystem
 
 
 
@@ -70,19 +87,22 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Initialize t ->
+            ( { model | solarSystem = seed t, initialized = True }, Cmd.none )
+
+        OnWindowResize windowSize ->
+            ( { model | window = windowSize }, Cmd.none )
+
+        Advance dt ->
             let
-                system =
-                    seed t
+                solarSystem =
+                    advance (dt * model.timeStep) model.solarSystem
             in
-                ( { solarSystem = Just system }, Cmd.none )
-
-        Frame dx ->
-            case model.solarSystem of
-                Just system ->
-                    ( { model | solarSystem = Just (advance dx system) }, Cmd.none )
-
-                Nothing ->
-                    Debug.crash ("Shouldn't happen since we only listen after initialization")
+                ( { model
+                    | numTimes = model.numTimes + 1
+                    , solarSystem = solarSystem
+                  }
+                , Cmd.none
+                )
 
 
 
@@ -91,10 +111,11 @@ update msg model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    case model.solarSystem of
-        -- Start the animation frame after the solarSystem has been initialized
-        Just system ->
-            diffs Frame
-
-        Nothing ->
-            Sub.none
+    if model.initialized && model.numTimes < maxIterations then
+        Sub.batch
+            [ AnimationFrame.diffs Advance
+            , Window.resizes OnWindowResize
+            ]
+    else
+        Sub.batch
+            [ Window.resizes OnWindowResize ]

@@ -4,45 +4,8 @@ import Math.Vector3 exposing (Vec3, vec3)
 import Time exposing (Time)
 import Date exposing (Date, fromString, fromTime)
 import Date.Extra.Duration exposing (diffDays)
-import Types exposing (Degrees, Radians)
-import KeplerElements exposing (KeplerElements)
-import OrbitUtils exposing (calculateEccentricAnomaly, calculateMeanAnomaly, transformToEcliptic)
-
-
-type alias Orbit =
-    { parameters : OrbitalParameters
-    , derived : OrbitalStatistics
-    }
-
-
-type OrbitalParameters
-    = Elliptic OrbitalElements
-
-
-
-{-
-   Each Orbit is uniquely defined by 6 values that can position a body in space and time
--}
-
-
-type alias OrbitalElements =
-    { semiMajorAxis : Float
-    , eccentricity : Float
-    , inclination : Radians
-    , argumentPerihelion : Radians
-    , longitudeAscendingNode : Radians
-    , meanAnomaly : Radians
-    }
-
-
-
-{-
-   Calculated values that are dependent on the OrbitalElements
--}
-
-
-type alias OrbitalStatistics =
-    { position : Vec3, velocity : Vec3 }
+import Types exposing (..)
+import OrbitUtils exposing (frem, calculateEccentricAnomaly, calculateMeanAnomaly, transformToEcliptic)
 
 
 j2000Date : Date
@@ -61,63 +24,113 @@ j2000Date =
 -}
 
 
-fromKeplerElements : Time -> Maybe KeplerElements -> Maybe Orbit
-fromKeplerElements t elems =
-    case elems of
-        Nothing ->
-            Nothing
+fromKeplerElements : Time -> Primary -> KeplerElements -> Orbit
+fromKeplerElements t primary elements =
+    let
+        now =
+            fromTime t
 
-        Just elements ->
+        julianDate =
+            (toFloat (diffDays now j2000Date)) / 36525
+
+        a =
+            elements.a.epoch + elements.a.delta * julianDate
+
+        e =
+            elements.e.epoch + elements.e.delta * julianDate
+
+        i =
+            elements.i.epoch + elements.i.delta * julianDate
+
+        l =
+            elements.l.epoch + elements.l.delta * julianDate
+
+        w =
+            elements.w.epoch + elements.w.delta * julianDate
+
+        omega =
+            elements.omega.epoch + elements.omega.epoch * julianDate
+
+        argumentPerihelion =
+            w - omega
+
+        meanAnomaly =
+            calculateMeanAnomaly l w julianDate
+
+        gm =
+            case primary.constants of
+                Planet constants ->
+                    constants.gm
+
+        parameters =
+            Elliptic
+                { gm = gm
+                , semiMajorAxis = a
+                , eccentricity = e
+                , inclination = degrees i
+                , argumentPerihelion = degrees argumentPerihelion
+                , longitudeAscendingNode = degrees omega
+                , meanAnomaly = degrees meanAnomaly
+                }
+    in
+        { parameters = parameters
+        , derived = statistics parameters
+        }
+
+
+meanAngularMotion : Orbit -> Float
+meanAngularMotion orbit =
+    case orbit.parameters of
+        Stationary ->
+            0
+
+        Elliptic elements ->
+            sqrt (elements.gm / (elements.semiMajorAxis ^ 3))
+
+
+advance : Time -> Orbit -> Orbit
+advance dt orbit =
+    case orbit.parameters of
+        ------------------------------------
+        Stationary ->
+            orbit
+
+        ------------------------------------
+        Elliptic parameters ->
             let
-                now =
-                    fromTime t
+                n =
+                    meanAngularMotion orbit
 
-                julianDate =
-                    (toFloat (diffDays now j2000Date)) / 36525
-
-                a =
-                    elements.a.epoch + elements.a.delta * julianDate
-
-                e =
-                    elements.e.epoch + elements.e.delta * julianDate
-
-                i =
-                    elements.i.epoch + elements.i.delta * julianDate
-
-                l =
-                    elements.l.epoch + elements.l.delta * julianDate
-
-                w =
-                    elements.w.epoch + elements.w.delta * julianDate
-
-                omega =
-                    elements.omega.epoch + elements.omega.epoch * julianDate
-
-                argumentPerihelion =
-                    w - omega
+                m0 =
+                    parameters.meanAnomaly + (n * dt / 1000)
 
                 meanAnomaly =
-                    calculateMeanAnomaly l w julianDate
+                    if (parameters.eccentricity < 1) then
+                        frem m0 (2 * pi)
+                    else
+                        m0
 
-                parameters =
-                    Elliptic
-                        { semiMajorAxis = a
-                        , eccentricity = e
-                        , inclination = degrees i
-                        , argumentPerihelion = degrees argumentPerihelion
-                        , longitudeAscendingNode = degrees omega
-                        , meanAnomaly = degrees meanAnomaly
-                        }
+                params =
+                    { parameters | meanAnomaly = meanAnomaly }
+
+                stats =
+                    statistics (Elliptic params)
             in
-                Just
-                    { parameters = parameters
-                    , derived = statistics parameters
-                    }
+                { parameters = Elliptic params
+                , derived = stats
+                }
 
 
 statistics : OrbitalParameters -> OrbitalStatistics
 statistics parameters =
     case parameters of
+        ------------------------------------
+        Stationary ->
+            { position = vec3 0 0 0
+            , velocity = vec3 0 0 0
+            }
+
+        ------------------------------------
         Elliptic params ->
             let
                 a =
@@ -141,7 +154,7 @@ statistics parameters =
                 perifocalPosition =
                     vec3
                         (a * ((cos eccentricAnomaly) - e))
-                        (a * sqrt (1 - e * e) * sin (eccentricAnomaly))
+                        (a * sqrt (1 - e ^ 2) * sin (eccentricAnomaly))
                         0
             in
                 { position =

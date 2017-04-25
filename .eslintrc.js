@@ -897,7 +897,7 @@ module.exports = {
     sourceType: 'module',
     allowImportExportEverywhere: true,
   },
-  plugins: [],
+  plugins: ['import'],
   extends: [],
   ecmaFeatures: { jsx: true },
 };
