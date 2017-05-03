@@ -5,7 +5,7 @@ import Window
 import Task
 import Time exposing (Time)
 import AnimationFrame
-import SolarSystem exposing (SolarSystem, seed, advance)
+import SolarSystem exposing (SolarSystem)
 import View
 
 
@@ -24,7 +24,7 @@ main =
 
 maxIterations : Int
 maxIterations =
-    1000
+    250
 
 
 
@@ -63,10 +63,10 @@ initialModel =
 init : ( Model, Cmd Msg )
 init =
     ( initialModel
-    , Cmd.batch
-        [ Task.perform Initialize Time.now
-        , Task.perform OnWindowResize Window.size
-        ]
+    , Task.perform Initialize
+        (Time.now
+            |> Task.andThen (\time -> Task.map (\size -> ( time, size )) Window.size)
+        )
     )
 
 
@@ -75,7 +75,7 @@ init =
 
 
 type Msg
-    = Initialize Time
+    = Initialize ( Time, Window.Size )
     | OnWindowResize Window.Size
     | Advance Time
 
@@ -96,21 +96,33 @@ view { context, solarSystem } =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Initialize t ->
-            ( { model | solarSystem = seed t, initialized = True }, Cmd.none )
+        -- Initialize the scene given the current time and window size
+        Initialize ( t, window ) ->
+            let
+                system =
+                    SolarSystem.seed t
+            in
+                ( { model
+                    | solarSystem = system
+                    , context = View.init window system
+                    , initialized = True
+                  }
+                , Cmd.none
+                )
 
+        -- Update the scene when the window resizes
         OnWindowResize windowSize ->
-            -- TODO: Update window size
-            ( model, Cmd.none )
+            ( { model | context = View.updateCamera model.context windowSize }, Cmd.none )
 
+        -- Update the scene every frame to provide smooth animation
         Advance dt ->
             let
                 solarSystem =
-                    advance (dt * model.timeStep) model.solarSystem
+                    SolarSystem.advance (dt * model.timeStep) model.solarSystem
             in
                 ( { model
                     | numTimes = model.numTimes + 1
-                    , solarSystem = solarSystem
+                    , solarSystem = SolarSystem.advance (dt * model.timeStep) model.solarSystem
                   }
                 , Cmd.none
                 )

@@ -1,4 +1,4 @@
-module View exposing (RenderingContext, init, render)
+module View exposing (RenderingContext, init, render, updateCamera)
 
 import Dict exposing (Dict)
 import Html exposing (Html)
@@ -16,28 +16,28 @@ import Types exposing (..)
 type alias RenderingContext =
     { camera : Mat4
     , window : Window.Size
-    , meshes : Dict String (Mesh Vertex)
+    , meshes : Dict String ( Mat4, Mesh Vertex )
     }
-
-
-emptyMesh : Mesh Vertex
-emptyMesh =
-    WebGL.points [ { color = vec3 0 0 0, position = vec3 0 0 0 } ]
 
 
 init : Window.Size -> SolarSystem -> RenderingContext
 init window solarSystem =
     let
         -- Precompute Meshes on init to avoid this costly operation each time we render
-        toMesh : Body -> List ( String, Mesh Vertex )
+        toMesh : Body -> List ( String, ( Mat4, Mesh Vertex ) )
         toMesh body =
-            [ ( body.name, (discMesh 50 body.constants.radius (color body)) )
+            [ ( body.name, ( Mat4.identity, discMesh 50 body.constants.radius (color body) ) )
             , ( body.name ++ "-trajectory"
-              , circleMesh 50 1 (color body)
+              , case (trajectoryMatrix body) of
+                    Nothing ->
+                        ( Mat4.identity, emptyMesh )
+
+                    Just matrix ->
+                        ( matrix, circleMesh 50 1 (color body) )
               )
             ]
 
-        meshes : Dict String (Mesh Vertex)
+        meshes : Dict String ( Mat4, Mesh Vertex )
         meshes =
             Dict.fromList (List.concat (SolarSystem.forEach toMesh solarSystem))
     in
@@ -46,6 +46,19 @@ init window solarSystem =
         , window = window
         , meshes = meshes
         }
+
+
+
+-- Allow the view to adjust for a changing window size
+
+
+updateCamera : RenderingContext -> Window.Size -> RenderingContext
+updateCamera context window =
+    { context
+        | camera =
+            Mat4.makePerspective 45 (toFloat window.width / toFloat window.height) 0.01 100
+        , window = window
+    }
 
 
 render : RenderingContext -> SolarSystem -> Html msg
@@ -69,33 +82,34 @@ render context solarSystem =
             toEntity : Body -> List WebGL.Entity
             toEntity body =
                 let
-                    bodyMesh =
-                        Maybe.withDefault emptyMesh (Dict.get body.name context.meshes)
+                    -- These dictionaries should not be empty so we'll just use a dummy default value to simplify
+                    ( bMatrix, bMesh ) =
+                        Maybe.withDefault ( Mat4.identity, emptyMesh ) (Dict.get body.name context.meshes)
 
-                    trajectoryMesh =
-                        Maybe.withDefault emptyMesh (Dict.get (body.name ++ "-trajectory") context.meshes)
+                    ( tMatrix, tMesh ) =
+                        Maybe.withDefault ( Mat4.identity, emptyMesh ) (Dict.get (body.name ++ "-trajectory") context.meshes)
                 in
-                    case (trajectoryMatrix body) of
-                        Nothing ->
-                            [ WebGL.entity
-                                vertexShader
-                                fragmentShader
-                                bodyMesh
-                                { matrix = Mat4.mul cameraMatrix (bodyMatrix body cameraPosition) }
-                            ]
-
-                        Just trajectoryMatrix ->
-                            [ WebGL.entity
-                                vertexShader
-                                fragmentShader
-                                bodyMesh
-                                { matrix = Mat4.mul cameraMatrix (bodyMatrix body cameraPosition) }
-                            , WebGL.entity
-                                vertexShader
-                                fragmentShader
-                                trajectoryMesh
-                                { matrix = Mat4.mul cameraMatrix trajectoryMatrix }
-                            ]
+                    [ WebGL.entity
+                        vertexShader
+                        fragmentShader
+                        bMesh
+                        { matrix =
+                            List.foldl Mat4.mul
+                                bMatrix
+                                [ bodyMatrix body cameraPosition
+                                , cameraMatrix
+                                ]
+                        }
+                    , WebGL.entity
+                        vertexShader
+                        fragmentShader
+                        tMesh
+                        { matrix =
+                            List.foldl Mat4.mul
+                                tMatrix
+                                [ cameraMatrix ]
+                        }
+                    ]
          in
             List.concat (SolarSystem.forEach toEntity solarSystem)
         )
@@ -133,6 +147,10 @@ color body =
             (toFloat c.blue / 255)
 
 
+
+-- Return the matrix for this body's current position
+
+
 bodyMatrix : Body -> Vec3 -> Mat4
 bodyMatrix body cameraPosition =
     let
@@ -148,6 +166,10 @@ bodyMatrix body cameraPosition =
             , Mat4.makeTranslate
                 position
             ]
+
+
+
+-- Return the matrix for this body's trajectory.  This only needs to be recomputed if the orbit changes
 
 
 trajectoryMatrix : Body -> Maybe Mat4
@@ -173,6 +195,11 @@ trajectoryMatrix body =
                     , Mat4.makeTranslate body.orbit.derived.center
                     ]
                 )
+
+
+emptyMesh : Mesh Vertex
+emptyMesh =
+    WebGL.points [ { color = vec3 0 0 0, position = vec3 0 0 0 } ]
 
 
 
