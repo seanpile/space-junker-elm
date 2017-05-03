@@ -1,4 +1,4 @@
-module SolarSystem exposing (au, SolarSystem, find, findByName, seed, advance, visit)
+module SolarSystem exposing (au, SolarSystem, find, findByName, seed, advance, forEach)
 
 import Time exposing (Time)
 import Orbits exposing (fromKeplerElements)
@@ -250,8 +250,8 @@ map fn system =
 -}
 
 
-visit : (Body -> a) -> SolarSystem -> List a
-visit fn system =
+forEach : (Body -> a) -> SolarSystem -> List a
+forEach fn system =
     let
         visitImpl : (Body -> a) -> Body -> List a
         visitImpl fn body =

@@ -35,19 +35,29 @@ type alias Model =
     { initialized : Bool
     , numTimes : Int
     , timeStep : Float
-    , window : Window.Size
     , solarSystem : SolarSystem
+    , context : View.RenderingContext
     }
 
 
 initialModel : Model
 initialModel =
-    { initialized = False
-    , numTimes = 0
-    , timeStep = 1.0e6
-    , window = { width = 0, height = 0 }
-    , solarSystem = SolarSystem.seed 0
-    }
+    let
+        window =
+            { width = 1024, height = 1024 }
+
+        initialSystem =
+            SolarSystem.seed 0
+
+        initialContext =
+            View.init window initialSystem
+    in
+        { initialized = False
+        , numTimes = 0
+        , timeStep = 1.0e6
+        , solarSystem = initialSystem
+        , context = initialContext
+        }
 
 
 init : ( Model, Cmd Msg )
@@ -75,8 +85,8 @@ type Msg
 
 
 view : Model -> Html Msg
-view { window, solarSystem } =
-    View.render window solarSystem
+view { context, solarSystem } =
+    View.render context solarSystem
 
 
 
@@ -90,7 +100,8 @@ update msg model =
             ( { model | solarSystem = seed t, initialized = True }, Cmd.none )
 
         OnWindowResize windowSize ->
-            ( { model | window = windowSize }, Cmd.none )
+            -- TODO: Update window size
+            ( model, Cmd.none )
 
         Advance dt ->
             let
