@@ -1,15 +1,23 @@
 module Main exposing (..)
 
 import Html exposing (Html, div, text, program)
+import Math.Matrix4 as Matrix4
+import Math.Vector3 as Vector3
 import Window
 import Task
 import Time exposing (Time)
 import AnimationFrame
 import SolarSystem exposing (SolarSystem)
 import View
+import OrbitControls exposing (OrbitEvent)
 
 
 -- MAIN
+
+
+maxIterations : Int
+maxIterations =
+    10000
 
 
 main : Program Never Model Msg
@@ -22,11 +30,6 @@ main =
         }
 
 
-maxIterations : Int
-maxIterations =
-    250
-
-
 
 -- MODEL
 
@@ -35,29 +38,21 @@ type alias Model =
     { initialized : Bool
     , numTimes : Int
     , timeStep : Float
-    , solarSystem : SolarSystem
-    , context : View.RenderingContext
+    , solarSystem : Maybe SolarSystem
+    , context : Maybe View.RenderingContext
+    , orbitControl : Maybe ( OrbitControls.Options, OrbitControls.State )
     }
 
 
 initialModel : Model
 initialModel =
-    let
-        window =
-            { width = 1024, height = 1024 }
-
-        initialSystem =
-            SolarSystem.seed 0
-
-        initialContext =
-            View.init window initialSystem
-    in
-        { initialized = False
-        , numTimes = 0
-        , timeStep = 1.0e6
-        , solarSystem = initialSystem
-        , context = initialContext
-        }
+    { initialized = False
+    , numTimes = 0
+    , timeStep = 1.0e6
+    , solarSystem = Nothing
+    , context = Nothing
+    , orbitControl = Nothing
+    }
 
 
 init : ( Model, Cmd Msg )
@@ -77,6 +72,7 @@ init =
 type Msg
     = Initialize ( Time, Window.Size )
     | OnWindowResize Window.Size
+    | OnOrbit OrbitEvent
     | Advance Time
 
 
@@ -85,8 +81,16 @@ type Msg
 
 
 view : Model -> Html Msg
-view { context, solarSystem } =
-    View.render context solarSystem
+view { context, solarSystem, orbitControl } =
+    case Maybe.map3 (,,) context solarSystem orbitControl of
+        Nothing ->
+            div []
+                [ Html.text "Loading..."
+                ]
+
+        Just ( context, solarSystem, orbitControl ) ->
+            div (OrbitControls.listeners (Tuple.second orbitControl) OnOrbit)
+                [ View.render context solarSystem ]
 
 
 
@@ -101,10 +105,27 @@ update msg model =
             let
                 system =
                     SolarSystem.seed t
+
+                context =
+                    View.init window system
+
+                orbitState =
+                    OrbitControls.defaultState
+
+                defaultOrbitOptions =
+                    OrbitControls.defaultOptions
+
+                orbitOptions =
+                    { defaultOrbitOptions
+                        | zoomSpeed = 1.0
+                        , up = context.up
+                        , target = context.target
+                    }
             in
                 ( { model
-                    | solarSystem = system
-                    , context = View.init window system
+                    | solarSystem = Just system
+                    , context = Just context
+                    , orbitControl = Just ( orbitOptions, orbitState )
                     , initialized = True
                   }
                 , Cmd.none
@@ -112,20 +133,48 @@ update msg model =
 
         -- Update the scene when the window resizes
         OnWindowResize windowSize ->
-            ( { model | context = View.updateCamera model.context windowSize }, Cmd.none )
+            ( { model | context = Maybe.map2 View.updateWindow model.context (Just windowSize) }, Cmd.none )
+
+        OnOrbit event ->
+            case (Maybe.map2 (,) model.context model.orbitControl) of
+                Nothing ->
+                    ( model, Cmd.none )
+
+                Just ( context, orbitControl ) ->
+                    let
+                        ( options, state ) =
+                            orbitControl
+
+                        ( updatedCamera, updatedState ) =
+                            OrbitControls.applyWithOptions options event ( context.camera, state )
+
+                        updatedContext =
+                            View.updateCamera context updatedCamera
+                    in
+                        ( { model
+                            | orbitControl = Just ( options, updatedState )
+                            , context = Just updatedContext
+                          }
+                        , Cmd.none
+                        )
 
         -- Update the scene every frame to provide smooth animation
         Advance dt ->
-            let
-                solarSystem =
-                    SolarSystem.advance (dt * model.timeStep) model.solarSystem
-            in
-                ( { model
-                    | numTimes = model.numTimes + 1
-                    , solarSystem = SolarSystem.advance (dt * model.timeStep) model.solarSystem
-                  }
-                , Cmd.none
-                )
+            case model.solarSystem of
+                Nothing ->
+                    ( model, Cmd.none )
+
+                Just system ->
+                    let
+                        solarSystem =
+                            SolarSystem.advance (dt * model.timeStep) system
+                    in
+                        ( { model
+                            | numTimes = model.numTimes + 1
+                            , solarSystem = Just solarSystem
+                          }
+                        , Cmd.none
+                        )
 
 
 

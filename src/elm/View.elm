@@ -1,23 +1,62 @@
-module View exposing (RenderingContext, init, render, updateCamera)
+module View exposing (RenderingContext, init, render, updateWindow, updateCamera)
 
+import Color exposing (Color)
 import Dict exposing (Dict)
 import Html exposing (Html)
-import Color exposing (Color)
 import Html.Attributes exposing (width, height, style)
-import Window
 import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector3 as Vec3 exposing (vec3, Vec3)
 import WebGL exposing (Mesh, Shader)
+import Window
 import Meshes exposing (Vertex, circleMesh, discMesh)
 import SolarSystem exposing (..)
 import Types exposing (..)
 
 
+-- Types
+
+
 type alias RenderingContext =
-    { camera : Mat4
+    { projection : Mat4
+    , camera : Vec3
+    , cameraMatrix : Mat4
+    , up : Vec3
+    , target : Vec3
     , window : Window.Size
     , meshes : Dict String ( Mat4, Mesh Vertex )
     }
+
+
+type alias Uniforms =
+    { matrix : Mat4 }
+
+
+
+-- Constants
+
+
+defaultCameraPosition : Vec3
+defaultCameraPosition =
+    vec3 0 0 5
+
+
+defaultUp : Vec3
+defaultUp =
+    vec3 0 0 1
+
+
+defaultOrigin : Vec3
+defaultOrigin =
+    vec3 0 0 0
+
+
+emptyMesh : Mesh Vertex
+emptyMesh =
+    WebGL.points [ { color = vec3 0 0 0, position = vec3 0 0 0 } ]
+
+
+
+-- Methods
 
 
 init : Window.Size -> SolarSystem -> RenderingContext
@@ -40,25 +79,53 @@ init window solarSystem =
         meshes : Dict String ( Mat4, Mesh Vertex )
         meshes =
             Dict.fromList (List.concat (SolarSystem.forEach toMesh solarSystem))
+
+        cameraProjection =
+            projection window.width window.height
+
+        cameraPosition =
+            defaultCameraPosition
+
+        cameraMatrix =
+            Mat4.mul cameraProjection (Mat4.makeLookAt cameraPosition defaultOrigin defaultUp)
     in
-        { camera =
-            Mat4.makePerspective 45 (toFloat window.width / toFloat window.height) 0.01 100
-        , window = window
-        , meshes = meshes
-        }
+        updateWindow
+            { projection = cameraProjection
+            , camera = cameraPosition
+            , cameraMatrix = cameraMatrix
+            , up = defaultUp
+            , target = defaultOrigin
+            , window = window
+            , meshes = meshes
+            }
+            window
 
 
 
 -- Allow the view to adjust for a changing window size
 
 
-updateCamera : RenderingContext -> Window.Size -> RenderingContext
-updateCamera context window =
+updateCamera : RenderingContext -> Vec3 -> RenderingContext
+updateCamera context camera =
     { context
-        | camera =
-            Mat4.makePerspective 45 (toFloat window.width / toFloat window.height) 0.01 100
-        , window = window
+        | camera = camera
+        , cameraMatrix = Mat4.mul context.projection (Mat4.makeLookAt camera context.target context.up)
     }
+
+
+updateWindow : RenderingContext -> Window.Size -> RenderingContext
+updateWindow context window =
+    updateCamera
+        { context
+            | projection = projection window.width window.height
+            , window = window
+        }
+        context.camera
+
+
+projection : Int -> Int -> Mat4
+projection width height =
+    Mat4.makePerspective 45 (toFloat width / toFloat height) 0.01 100
 
 
 render : RenderingContext -> SolarSystem -> Html msg
@@ -69,14 +136,8 @@ render context solarSystem =
         , style [ ( "display", "block" ), ( "background-color", "black" ) ]
         ]
         (let
-            cameraPosition =
-                vec3 0 0 5
-
-            camera =
-                Mat4.makeLookAt cameraPosition (vec3 0 0 0) (vec3 0 1 0)
-
             cameraMatrix =
-                Mat4.mul context.camera camera
+                context.cameraMatrix
 
             -- Mapping function that will convert each body into something we can pass to WebGL
             toEntity : Body -> List WebGL.Entity
@@ -96,7 +157,7 @@ render context solarSystem =
                         { matrix =
                             List.foldl Mat4.mul
                                 bMatrix
-                                [ bodyMatrix body cameraPosition
+                                [ bodyMatrix body context.camera
                                 , cameraMatrix
                                 ]
                         }
@@ -113,10 +174,6 @@ render context solarSystem =
          in
             List.concat (SolarSystem.forEach toEntity solarSystem)
         )
-
-
-type alias Uniforms =
-    { matrix : Mat4 }
 
 
 color : Body -> Vec3
@@ -195,11 +252,6 @@ trajectoryMatrix body =
                     , Mat4.makeTranslate body.orbit.derived.center
                     ]
                 )
-
-
-emptyMesh : Mesh Vertex
-emptyMesh =
-    WebGL.points [ { color = vec3 0 0 0, position = vec3 0 0 0 } ]
 
 
 

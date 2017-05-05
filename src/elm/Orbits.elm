@@ -54,6 +54,7 @@ fromKeplerElements t primary elements =
         argumentPerihelion =
             w - omega
 
+        -- TODO: Add Perturbations here for outer planets
         meanAnomaly =
             calculateMeanAnomaly l w julianDate
 
@@ -65,7 +66,7 @@ fromKeplerElements t primary elements =
                 , inclination = degrees i
                 , argumentPerihelion = degrees argumentPerihelion
                 , longitudeAscendingNode = degrees omega
-                , meanAnomaly = degrees meanAnomaly
+                , meanAnomaly = meanAnomaly
                 }
     in
         { parameters = parameters
