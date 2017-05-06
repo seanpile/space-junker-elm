@@ -18,7 +18,7 @@
         "elm-lang/window": "1.0.1 <= v < 2.0.0",
         "mkovacs/quaternion": "1.0.0 <= v < 2.0.0",
         "rluiten/elm-date-extra": "8.5.0 <= v < 9.0.0",
-        "seanpile/elm-orbit-controls": "1.0.0 <= v < 2.0.0"
+        "seanpile/elm-orbit-controls": "2.0.0 <= v < 3.0.0"
     },
     "elm-version": "0.18.0 <= v < 0.19.0"
 }

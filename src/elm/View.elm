@@ -8,7 +8,7 @@ import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector3 as Vec3 exposing (vec3, Vec3)
 import WebGL exposing (Mesh, Shader)
 import Window
-import Meshes exposing (Vertex, circleMesh, discMesh)
+import Meshes exposing (Vertex)
 import SolarSystem exposing (..)
 import Types exposing (..)
 
@@ -65,14 +65,14 @@ init window solarSystem =
         -- Precompute Meshes on init to avoid this costly operation each time we render
         toMesh : Body -> List ( String, ( Mat4, Mesh Vertex ) )
         toMesh body =
-            [ ( body.name, ( Mat4.identity, discMesh 50 body.constants.radius (color body) ) )
+            [ ( body.name, ( Mat4.identity, Meshes.sphere body.constants.radius 10 10 (color body) ) )
             , ( body.name ++ "-trajectory"
               , case (trajectoryMatrix body) of
                     Nothing ->
                         ( Mat4.identity, emptyMesh )
 
                     Just matrix ->
-                        ( matrix, circleMesh 50 1 (color body) )
+                        ( matrix, Meshes.circle 50 1 (color body) )
               )
             ]
 
